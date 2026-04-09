@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>北影节排片日历</title>
+    <title>北影节排片日历 - 完整列表版</title>
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React and ReactDOM -->
@@ -39,11 +39,11 @@
             box-shadow: 0 0 20px rgba(0,0,0,0.05);
         }
         @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .animate-fade-in {
-            animation: fadeIn 0.2s ease-out;
+            animation: fadeIn 0.3s ease-out forwards;
         }
         @keyframes slideUp {
             from { transform: translateY(100%); }
@@ -934,6 +934,23 @@ Please follow our official platforms for latest information on screenings and ev
             return `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
         };
 
+        // ✨ 核心预警：计算两部电影之间是否发生时间冲突 ✨
+        const checkConflict = (prevMovie, currentMovie) => {
+            if (!prevMovie || !currentMovie) return false;
+            const [prevH, prevM] = prevMovie.time.split(':').map(Number);
+            const [currH, currM] = currentMovie.time.split(':').map(Number);
+            
+            const prevStartMins = prevH * 60 + prevM;
+            const prevEndMins = prevStartMins + parseInt(prevMovie.duration);
+            
+            let currStartMins = currH * 60 + currM;
+            // 跨越零点的场次时间处理
+            if (currStartMins < prevStartMins) currStartMins += 24 * 60; 
+
+            // 如果当前影片的开始时间早于上一部影片的结束时间，则判定冲突
+            return currStartMins < prevEndMins;
+        };
+
         const formatShortDate = (dateStr) => {
             if (!dateStr) return "";
             const date = new Date(dateStr);
@@ -1225,6 +1242,8 @@ Please follow our official platforms for latest information on screenings and ev
         };
 
         const App = () => {
+            const [activeTab, setActiveTab] = useState('main');
+
             const [selectedDates, setSelectedDates] = useState([]);
             const [selectedVenues, setSelectedVenues] = useState([]);
             const [selectedUnits, setSelectedUnits] = useState([]);
@@ -1235,18 +1254,14 @@ Please follow our official platforms for latest information on screenings and ev
             const [isGalleryOpen, setIsGalleryOpen] = useState(false); 
             const [lightboxIndex, setLightboxIndex] = useState(null); 
             const [showContactModal, setShowContactModal] = useState(false); 
+
+            const [toastMsg, setToastMsg] = useState("");
+            const showToast = (msg) => {
+                setToastMsg(msg);
+                setTimeout(() => setToastMsg(""), 3000);
+            };
             
-            // ==========================================
-            // ✨ 选定日程的本地存储与链接分享记忆状态
-            // ==========================================
             const [selectedSchedules, setSelectedSchedules] = useState(() => {
-                // 1. 优先尝试从分享 URL 读取片单
-                const params = new URLSearchParams(window.location.search);
-                const shared = params.get('s');
-                if (shared) {
-                    return shared.split(',');
-                }
-                // 2. 如果没有分享链接，则从本地读取上次的进度
                 try {
                     const saved = localStorage.getItem('bjiff_saved_schedules');
                     return saved ? JSON.parse(saved) : [];
@@ -1254,26 +1269,31 @@ Please follow our official platforms for latest information on screenings and ev
                     return [];
                 }
             }); 
-            
-            const [isSelectMode, setIsSelectMode] = useState(() => {
-                // 如果通过链接进来，自动开启选中模式方便查看
-                return new URLSearchParams(window.location.search).has('s');
-            });
-            
-            // 实时将选中日程同步到 LocalStorage 并且更新 URL Params，生成可分享的纯净链接
+
+            useEffect(() => {
+                const params = new URLSearchParams(window.location.search);
+                const shared = params.get('s');
+                if (shared) {
+                    const sharedList = shared.split(',');
+                    setSelectedSchedules(prev => {
+                        const merged = Array.from(new Set([...prev, ...sharedList]));
+                        localStorage.setItem('bjiff_saved_schedules', JSON.stringify(merged));
+                        return merged;
+                    });
+                    setActiveTab('calendar');
+                    window.history.replaceState({}, '', window.location.pathname);
+                    showToast("✅ 已成功导入好友分享的排片日程！");
+                }
+            }, []);
+
             useEffect(() => {
                 try {
-                    const url = new URL(window.location);
-                    if (selectedSchedules.length > 0) {
-                        url.searchParams.set('s', selectedSchedules.join(','));
-                    } else {
-                        url.searchParams.delete('s');
-                    }
-                    window.history.replaceState({}, '', url);
                     localStorage.setItem('bjiff_saved_schedules', JSON.stringify(selectedSchedules));
                 } catch(e) {}
             }, [selectedSchedules]);
 
+            const [isShareMode, setIsShareMode] = useState(false);
+            const [shareSelection, setShareSelection] = useState([]);
 
             const [isGenerating, setIsGenerating] = useState(false);
             const [generatedImage, setGeneratedImage] = useState(null);
@@ -1285,7 +1305,7 @@ Please follow our official platforms for latest information on screenings and ev
 
             const [copiedWechat, setCopiedWechat] = useState(false);
             const [copiedEmail, setCopiedEmail] = useState(false);
-            const [copiedLink, setCopiedLink] = useState(false); // 链接复制状态
+            const [copiedLink, setCopiedLink] = useState(false); 
 
             const [movieData, setMovieData] = useState([]);
             const [parseError, setParseError] = useState("");
@@ -1330,7 +1350,6 @@ Please follow our official platforms for latest information on screenings and ev
                             const date = timeParts[0]; 
                             const time = timeParts[1].substring(0, 5); 
                             
-                            // ✨ 根据核心信息生成决定性的唯一标识符 (保证分享链接永远有效一致)
                             const str = name + date + timeStr + venue;
                             let hash = 0;
                             for (let i = 0; i < str.length; i++) {
@@ -1375,7 +1394,6 @@ Please follow our official platforms for latest information on screenings and ev
                 }
             }, [selectedUnits, availableMovies, selectedMovies]);
 
-            // 监听滚动显示回到顶部
             useEffect(() => {
                 const handleScroll = () => {
                     const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
@@ -1393,6 +1411,24 @@ Please follow our official platforms for latest information on screenings and ev
                 };
             }, []);
 
+            const toggleSchedule = (uid) => {
+                if (selectedSchedules.includes(uid)) {
+                    setSelectedSchedules(selectedSchedules.filter(id => id !== uid));
+                    showToast("已移出我的日历");
+                } else {
+                    setSelectedSchedules([...selectedSchedules, uid]);
+                    showToast("成功加入日历！");
+                }
+            };
+
+            const toggleShareSelection = (uid) => {
+                if (shareSelection.includes(uid)) {
+                    setShareSelection(shareSelection.filter(id => id !== uid));
+                } else {
+                    setShareSelection([...shareSelection, uid]);
+                }
+            };
+
             const rawFilteredData = useMemo(() => {
                 return movieData.filter(m => {
                     if (selectedDates.length > 0 && !selectedDates.includes(m.date)) return false;
@@ -1407,7 +1443,7 @@ Please follow our official platforms for latest information on screenings and ev
                 });
             }, [selectedDates, selectedVenues, selectedUnits, selectedMovies, hasActivity, movieData]);
 
-            const scheduleData = useMemo(() => {
+            const scheduleDataGroupedByVenue = useMemo(() => {
                 const grouped = {};
                 rawFilteredData.forEach(movie => {
                     if (!grouped[movie.date]) grouped[movie.date] = {};
@@ -1417,24 +1453,36 @@ Please follow our official platforms for latest information on screenings and ev
                 return grouped;
             }, [rawFilteredData]);
 
-            const exportData = useMemo(() => {
-                if(selectedSchedules.length === 0) return {};
-                const toExport = movieData.filter(m => selectedSchedules.includes(m._uid)).sort((a, b) => {
+            const myCalendarData = useMemo(() => {
+                const list = movieData.filter(m => selectedSchedules.includes(m._uid)).sort((a, b) => {
                     if (a.date !== b.date) return a.date.localeCompare(b.date);
                     return a.time.localeCompare(b.time);
                 });
                 const grouped = {};
-                toExport.forEach(movie => {
-                    if (!grouped[movie.date]) grouped[movie.date] = {};
-                    if (!grouped[movie.date][movie.venue]) grouped[movie.date][movie.venue] = [];
-                    grouped[movie.date][movie.venue].push(movie);
+                list.forEach(m => {
+                    if (!grouped[m.date]) grouped[m.date] = [];
+                    grouped[m.date].push(m);
                 });
                 return grouped;
             }, [selectedSchedules, movieData]);
 
+            const exportShareData = useMemo(() => {
+                if(shareSelection.length === 0) return {};
+                const list = movieData.filter(m => shareSelection.includes(m._uid)).sort((a, b) => {
+                    if (a.date !== b.date) return a.date.localeCompare(b.date);
+                    return a.time.localeCompare(b.time);
+                });
+                const grouped = {};
+                list.forEach(m => {
+                    if (!grouped[m.date]) grouped[m.date] = [];
+                    grouped[m.date].push(m);
+                });
+                return grouped;
+            }, [shareSelection, movieData]);
+
             const handleGenerateImage = () => {
-                if(selectedSchedules.length === 0) {
-                    alert("您还未选择任何影片场次！");
+                if(shareSelection.length === 0) {
+                    alert("您还未选择要分享的影片！");
                     return;
                 }
                 setIsGenerating(true);
@@ -1448,7 +1496,7 @@ Please follow our official platforms for latest information on screenings and ev
                         }).then(canvas => {
                             setGeneratedImage(canvas.toDataURL('image/png'));
                             setIsGenerating(false);
-                            // 保留选择模式，方便用户关闭图片后继续修改
+                            setIsShareMode(false);
                         }).catch(err => {
                             console.error(err);
                             alert("生成图片失败，请稍后重试");
@@ -1456,14 +1504,6 @@ Please follow our official platforms for latest information on screenings and ev
                         });
                     }
                 }, 500);
-            };
-
-            const toggleScheduleSelection = (uid) => {
-                if (selectedSchedules.includes(uid)) {
-                    setSelectedSchedules(selectedSchedules.filter(id => id !== uid));
-                } else {
-                    setSelectedSchedules([...selectedSchedules, uid]);
-                }
             };
 
             const handleCopy = (text, type) => {
@@ -1487,8 +1527,7 @@ Please follow our official platforms for latest information on screenings and ev
                 document.body.removeChild(textArea);
             };
 
-            // 获取生成的专属分享链接 (强制绑定您的专属域名)
-            const shareUrl = "https://www.byjpd.top/" + (selectedSchedules.length > 0 ? "?s=" + selectedSchedules.join(',') : "");
+            const shareUrl = "https://www.byjpd.top/" + (shareSelection.length > 0 ? "?s=" + shareSelection.join(',') : "");
 
             const onTouchStart = (e) => { setTouchEnd(null); setTouchStart(e.targetTouches[0].clientX); };
             const onTouchMove = (e) => setTouchEnd(e.targetTouches[0].clientX);
@@ -1502,77 +1541,70 @@ Please follow our official platforms for latest information on screenings and ev
             return (
                 <div className="app-container flex flex-col relative pb-20">
                     
+                    {toastMsg && (
+                        <div className="fixed top-[80px] left-1/2 -translate-x-1/2 z-[200] bg-gray-800/90 backdrop-blur text-white px-5 py-2.5 rounded-full shadow-lg text-sm font-bold animate-fade-in whitespace-nowrap">
+                            {toastMsg}
+                        </div>
+                    )}
+
                     {/* 🌟 极致排版的离屏渲染区 (专门用于 html2canvas 导出图片) 🌟 */}
                     <div style={{ position: 'fixed', left: '-9999px', top: 0, width: '600px', zIndex: -9999 }}>
                         <div ref={exportRef} className="bg-[#f5f5f5] p-6 font-sans text-gray-800" style={{ width: '600px' }}>
-                            {/* 分享图头部 */}
                             <div className="bg-white rounded-2xl p-6 shadow-sm mb-5 border border-gray-100 text-center relative overflow-hidden">
                                 <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-400 to-[#ff4060]"></div>
                                 <h1 className="text-3xl font-bold tracking-tight mb-3 mt-2 text-gray-900">我的北影节日程</h1>
-                                <p className="text-gray-500 text-base">添加了 {selectedSchedules.length} 场精彩放映</p>
+                                <p className="text-gray-500 text-base">我添加了 {shareSelection.length} 场精彩放映</p>
                             </div>
                             
-                            {/* 分享图日程列表 - 全面放大并自适应高度 */}
-                            {Object.entries(exportData).map(([date, venues]) => (
+                            {Object.entries(exportShareData).map(([date, movies]) => (
                                 <div key={date} className="mb-6">
-                                    <div className="px-4 py-2 bg-[#ff4060] inline-block text-white text-base font-bold rounded-t-xl shadow-sm">
+                                    <div className="px-5 py-2.5 bg-[#ff4060] inline-block text-white text-[17px] font-bold rounded-t-xl shadow-sm">
                                         {formatShortDate(date)} {getWeekday(date)}
                                     </div>
                                     <div className="bg-white rounded-b-2xl rounded-tr-2xl shadow-sm overflow-hidden border border-gray-100">
-                                        {Object.entries(venues).map(([venue, movies]) => (
-                                            <div key={venue} className="border-b border-gray-100 last:border-none">
-                                                <div className="px-5 py-3 bg-[#f0f9ff] flex items-center">
-                                                    <span className="text-sky-500 font-bold text-[15px]">{venue}</span>
-                                                </div>
-                                                <div className="px-5">
-                                                    {movies.map((movie, index) => (
-                                                        <div key={index} className="py-5 border-b border-gray-50 last:border-none flex items-start">
-                                                            <div className="w-[85px] shrink-0 pt-0.5">
-                                                                <div className="text-[22px] font-bold text-gray-900 mb-1">{movie.time}</div>
-                                                                <div className="text-[12px] text-gray-400">{movie.endTime}散场</div>
-                                                            </div>
-                                                            <div className="flex-1 px-3 break-words">
-                                                                {/* 绝对取消截断限制，依靠行高自动换行撑开高度 */}
-                                                                <div className="text-[20px] font-bold text-gray-900 mb-2 whitespace-normal break-words" style={{ lineHeight: '1.4' }}>
-                                                                    {movie.name}
-                                                                </div>
-                                                                <div className="text-[14px] text-gray-500 whitespace-normal break-words" style={{ lineHeight: '1.6' }}>
-                                                                    {movie.unit} {movie.unit && " | "} {movie.year && `${movie.year}年 | `} {movie.duration}分钟
-                                                                </div>
-                                                            </div>
-                                                            {movie.activity && (
-                                                                <div className="shrink-0 pt-1">
-                                                                    <span className="border border-orange-400 text-orange-500 text-[12px] px-2 py-1 rounded font-medium inline-block whitespace-nowrap">
-                                                                        {movie.activity}
-                                                                    </span>
-                                                                </div>
-                                                            )}
+                                        {movies.map((movie, index) => {
+                                            const isConflict = index > 0 && checkConflict(movies[index - 1], movie);
+                                            return (
+                                                <div key={index} className="py-5 px-5 border-b border-gray-100 last:border-none flex items-start">
+                                                    <div className="w-[85px] shrink-0 pt-1 text-center pr-3">
+                                                        <div className="text-[24px] font-bold text-gray-900 mb-1">{movie.time}</div>
+                                                        <div className="text-[12px] text-gray-400">{movie.endTime}散场</div>
+                                                    </div>
+                                                    <div className="flex-1 pl-2 border-l-2 border-gray-100 break-words">
+                                                        <div className="text-[22px] font-bold text-gray-900 mb-2 whitespace-normal" style={{ lineHeight: '1.4' }}>
+                                                            {movie.name}
                                                         </div>
-                                                    ))}
+                                                        <div className="text-[15px] font-bold text-sky-600 mb-1.5 flex items-start gap-1">
+                                                            📍 {movie.venue}
+                                                        </div>
+                                                        <div className="text-[14px] text-gray-500 whitespace-normal" style={{ lineHeight: '1.6' }}>
+                                                            {movie.unit} {movie.unit && " | "} {movie.year && `${movie.year}年 | `} {movie.duration}分钟
+                                                        </div>
+                                                        {movie.activity && (
+                                                            <div className="mt-1.5 inline-block border border-orange-400 text-orange-500 text-[12px] px-2 py-1 rounded font-medium whitespace-nowrap">
+                                                                {movie.activity}
+                                                            </div>
+                                                        )}
+                                                        {/* ✨ 导出图的冲突预警 ✨ */}
+                                                        {isConflict && (
+                                                            <div className="mt-2 inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-600 text-[13px] px-2 py-1 rounded font-bold">
+                                                                ⚠️ 与上一场放映时间重叠
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             ))}
 
-                            {/* 分享图底部水印 */}
                             <div className="mt-10 mb-4 flex flex-col items-center text-center opacity-60">
-                                <div className="text-[12px] font-medium text-gray-500 mb-1">本图片由「北影节排片日历」自动生成</div>
-                                <div className="text-[12px] text-gray-400 tracking-wider">powered by Marco</div>
+                                <div className="text-[12px] font-medium text-gray-500 mb-1">长按识别下方二维码查看/导入排片</div>
+                                <div className="text-[12px] text-gray-400 tracking-wider">powered by Marco · www.byjpd.top</div>
                             </div>
                         </div>
                     </div>
-
-                    {/* ===== 搜索与多选影片选择器 ===== */}
-                    {showMovieSelector && (
-                        <MovieSelectorModal 
-                            availableMovies={availableMovies} 
-                            selectedMovies={selectedMovies}
-                            onClose={() => setShowMovieSelector(false)}
-                            onSelect={setSelectedMovies}
-                        />
-                    )}
 
                     {/* ===== 完整片单图库弹窗 ===== */}
                     {isGalleryOpen && (
@@ -1610,12 +1642,12 @@ Please follow our official platforms for latest information on screenings and ev
                         </div>
                     )}
 
-                    {/* ===== 🌟 生成后的图片与分享链接展示弹窗 🌟 ===== */}
+                    {/* ===== 生成后的图片与分享链接展示弹窗 ===== */}
                     {generatedImage && (
                         <div className="fixed inset-0 z-[150] bg-black/80 flex flex-col items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
                             <div className="w-full max-w-[420px] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                                 <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
-                                    <span className="font-bold text-gray-800 text-sm">✨ 您的专属日程已生成</span>
+                                    <span className="font-bold text-gray-800 text-sm">✨ 分享排版已生成</span>
                                     <button onClick={() => setGeneratedImage(null)} className="text-gray-500 hover:text-red-500 p-1">
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                                     </button>
@@ -1624,11 +1656,10 @@ Please follow our official platforms for latest information on screenings and ev
                                     <img src={generatedImage} alt="已生成的日程" className="w-full h-auto shadow-md rounded border border-gray-300" />
                                 </div>
                                 
-                                {/* 带有复制链接功能的新版底部栏 */}
                                 <div className="p-4 bg-white shrink-0 border-t border-gray-100 flex flex-col gap-3">
                                     <div className="text-center">
                                         <p className="text-[#ff4060] font-bold text-sm mb-1">💡 请长按上方图片保存到手机相册</p>
-                                        <p className="text-xs text-gray-500">或复制下方链接发送给好友，自动同步排片</p>
+                                        <p className="text-xs text-gray-500">或复制下方专属链接发送给好友，一键同步排片</p>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <input 
@@ -1667,7 +1698,7 @@ Please follow our official platforms for latest information on screenings and ev
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                                         </button>
                                     </div>
-                                    <p className="text-sm text-gray-600 mb-5 leading-relaxed">如果有任何建议和疑问欢迎联系我<p></p>春招求offer中…</p>
+                                    <p className="text-sm text-gray-600 mb-5 leading-relaxed">如果有任何建议和疑问欢迎联系我<p></p>春招求offer中，求捞…</p>
                                     <div className="space-y-3">
                                         <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100">
                                             <div className="flex items-center gap-2 text-sm text-gray-800">
@@ -1698,192 +1729,259 @@ Please follow our official platforms for latest information on screenings and ev
                         </div>
                     )}
 
-                    {/* ===== 头部标题区 ===== */}
+                    {/* ===== 🌟 头部导航区 (主页/日历切换) 🌟 ===== */}
                     <div className="bg-white px-4 py-3 border-b border-gray-100 sticky top-0 z-40 h-[60px] shadow-sm flex justify-between items-center">
                         <div className="flex flex-col justify-center min-w-0 pr-2">
-                            <h1 className="text-lg font-bold text-gray-800 leading-tight truncate">第十六届北京国际电影节排片表</h1>
+                            <h1 className="text-lg font-bold text-gray-800 leading-tight truncate">北影节排片日程</h1>
                             <div className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">
-                                <span>共载入 {movieData.length} 场放映</span>
+                                <span>共 {movieData.length} 场</span>
                                 <span className="text-gray-300">|</span>
-                                <span>powered by Marco</span>
-                                <button 
-                                    onClick={() => setShowContactModal(true)}
-                                    className="ml-0.5 px-1.5 py-0.5 bg-gray-50 border border-gray-100 text-gray-400 rounded hover:bg-gray-100 hover:text-gray-600 transition-colors tracking-wide"
-                                >
-                                    联系作者
-                                </button>
+                                <button onClick={() => setShowContactModal(true)} className="ml-0.5 px-1.5 py-0.5 bg-gray-50 border border-gray-100 text-gray-400 rounded hover:bg-gray-100 transition-colors">联系作者</button>
                             </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                            {/* 日程选择模式 开关 */}
                             <button 
-                                onClick={() => { setIsSelectMode(!isSelectMode); }}
-                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors ${isSelectMode ? 'bg-gray-800 text-white shadow-md' : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'}`}
+                                onClick={() => setActiveTab(activeTab === 'main' ? 'calendar' : 'main')}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${activeTab === 'calendar' ? 'bg-[#ff4060] text-white' : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'}`}
                             >
-                                {isSelectMode ? "关闭选择" : "✅ 选定日程"}
+                                {activeTab === 'main' ? `📅 我的日历 (${selectedSchedules.length})` : '🏠 全部排片'}
                             </button>
                             
-                            <button 
-                                onClick={() => setIsGalleryOpen(true)}
-                                className="flex items-center gap-1 bg-[#ff4060] text-white px-2.5 py-1.5 rounded-full text-xs font-medium hover:bg-[#e63956] transition-colors shadow-sm"
-                            >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                完整片单
-                            </button>
+                            {activeTab === 'main' && (
+                                <button onClick={() => setIsGalleryOpen(true)} className="flex items-center bg-gray-800 text-white px-2.5 py-1.5 rounded-full text-xs font-bold hover:bg-gray-700 transition-colors shadow-sm">
+                                    完整片单
+                                </button>
+                            )}
                         </div>
                     </div>
 
-                    {/* ===== 核心筛选区 ===== */}
-                    <div className="bg-white border-b border-gray-200 sticky top-[60px] z-30 p-3 shadow-md flex flex-col justify-center gap-3 h-[130px]">
-                        {parseError ? (
-                            <div className="text-sm text-red-500 text-center font-bold h-full flex items-center justify-center">{parseError}</div>
-                        ) : movieData.length === 0 ? (
-                            <div className="text-sm text-gray-500 text-center h-full flex items-center justify-center">数据解析中...</div>
-                        ) : (
-                            <>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <FilterDropdown 
-                                        label="日期" icon="📆" options={dates} selectedValues={selectedDates} onChange={setSelectedDates} 
-                                        formatLabel={d => formatShortDate(d) + " " + getWeekday(d)} 
-                                    />
-                                    <FilterDropdown 
-                                        label="影院" icon="📽️" options={venues} selectedValues={selectedVenues} onChange={setSelectedVenues} 
-                                    />
-                                    <FilterDropdown 
-                                        label="单元" icon="🏷️" options={units} selectedValues={selectedUnits} onChange={setSelectedUnits} 
-                                    />
-
-                                    <div 
-                                        className="w-full text-xs sm:text-sm border border-gray-300 rounded px-2 py-1.5 bg-gray-50 flex items-center justify-between cursor-pointer hover:border-[#ff4060]"
-                                        onClick={() => setShowMovieSelector(true)}
-                                    >
-                                        <span className="truncate text-gray-700">
-                                            🎞️ 影片: {selectedMovies.length > 0 ? (selectedMovies.length === 1 ? selectedMovies[0] : `已选 ${selectedMovies.length} 部`) : (selectedUnits.length > 0 ? "该单元下全部" : "全部")}
-                                        </span>
-                                        <svg className="w-3.5 h-3.5 text-gray-400 shrink-0 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                    </div>
-                                </div>
-                                
-                                <label className="flex items-center justify-between text-sm bg-gray-50 border border-gray-200 rounded px-3 py-1.5 cursor-pointer hover:bg-gray-100 transition-colors">
-                                    <span className="text-gray-700 font-medium text-xs sm:text-sm">仅显示带有特殊活动场次</span>
-                                    <div className="relative inline-block w-10 align-middle select-none">
-                                        <input type="checkbox" className="absolute opacity-0 w-0 h-0" checked={hasActivity} onChange={e => setHasActivity(e.target.checked)} />
-                                        <div className={`block w-10 h-5 rounded-full transition-colors duration-200 ease-in-out ${hasActivity ? 'bg-[#ff4060]' : 'bg-gray-300'}`}></div>
-                                        <div className={`absolute left-0.5 top-0.5 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out shadow-sm ${hasActivity ? 'transform translate-x-5' : ''}`}></div>
-                                    </div>
-                                </label>
-                            </>
-                        )}
-                    </div>
-
-                    {/* ===== 影片列表展示区 ===== */}
-                    <div className="flex-1 bg-[#f5f5f5]">
-                        {Object.keys(scheduleData).length === 0 && movieData.length > 0 && !parseError && (
-                            <div className="text-center py-20 text-gray-400 flex flex-col items-center">
-                                <svg className="w-12 h-12 text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                没有找到符合条件的场次
+                    {/* ======================================================== */}
+                    {/* 全部排片视图                       */}
+                    {/* ======================================================== */}
+                    {activeTab === 'main' && (
+                        <>
+                            {/* 核心筛选区 */}
+                            <div className="bg-white border-b border-gray-200 sticky top-[60px] z-30 p-3 shadow-md flex flex-col justify-center gap-3 h-[130px] animate-fade-in">
+                                {parseError ? (
+                                    <div className="text-sm text-red-500 text-center font-bold h-full flex items-center justify-center">{parseError}</div>
+                                ) : movieData.length === 0 ? (
+                                    <div className="text-sm text-gray-500 text-center h-full flex items-center justify-center">数据解析中...</div>
+                                ) : (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <FilterDropdown label="日期" icon="📆" options={dates} selectedValues={selectedDates} onChange={setSelectedDates} formatLabel={d => formatShortDate(d) + " " + getWeekday(d)} />
+                                            <FilterDropdown label="影院" icon="📽️" options={venues} selectedValues={selectedVenues} onChange={setSelectedVenues} />
+                                            <FilterDropdown label="单元" icon="🏷️" options={units} selectedValues={selectedUnits} onChange={setSelectedUnits} />
+                                            <div className="w-full text-xs sm:text-sm border border-gray-300 rounded px-2 py-1.5 bg-gray-50 flex items-center justify-between cursor-pointer hover:border-[#ff4060]" onClick={() => setShowMovieSelector(true)}>
+                                                <span className="truncate text-gray-700">🎞️ 影片: {selectedMovies.length > 0 ? (selectedMovies.length === 1 ? selectedMovies[0] : `已选 ${selectedMovies.length} 部`) : (selectedUnits.length > 0 ? "该单元下全部" : "全部")}</span>
+                                                <svg className="w-3.5 h-3.5 text-gray-400 shrink-0 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                        <label className="flex items-center justify-between text-sm bg-gray-50 border border-gray-200 rounded px-3 py-1.5 cursor-pointer hover:bg-gray-100 transition-colors">
+                                            <span className="text-gray-700 font-medium text-xs sm:text-sm">仅显示带有特殊活动场次</span>
+                                            <div className="relative inline-block w-10 align-middle select-none">
+                                                <input type="checkbox" className="absolute opacity-0 w-0 h-0" checked={hasActivity} onChange={e => setHasActivity(e.target.checked)} />
+                                                <div className={`block w-10 h-5 rounded-full transition-colors duration-200 ease-in-out ${hasActivity ? 'bg-[#ff4060]' : 'bg-gray-300'}`}></div>
+                                                <div className={`absolute left-0.5 top-0.5 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out shadow-sm ${hasActivity ? 'transform translate-x-5' : ''}`}></div>
+                                            </div>
+                                        </label>
+                                    </>
+                                )}
                             </div>
-                        )}
 
-                        {Object.entries(scheduleData).map(([date, venues]) => (
-                            <div key={date}>
-                                {selectedDates.length !== 1 && (
-                                    <div className="px-4 py-2 bg-[#ff4060] text-white text-sm font-bold sticky top-[190px] z-20 shadow-sm flex items-center gap-2 h-[36px]">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                        {formatShortDate(date)} {getWeekday(date)}
+                            {/* 影片列表展示区 (按影院分组) */}
+                            <div className="flex-1 bg-[#f5f5f5] animate-fade-in">
+                                {Object.keys(scheduleDataGroupedByVenue).length === 0 && movieData.length > 0 && !parseError && (
+                                    <div className="text-center py-20 text-gray-400 flex flex-col items-center">
+                                        <svg className="w-12 h-12 text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                        没有找到符合条件的场次
                                     </div>
                                 )}
 
-                                {Object.entries(venues).map(([venue, movies]) => (
-                                    <div key={`${date}-${venue}`} className="bg-white mb-2 shadow-sm">
-                                        <div 
-                                            className="px-4 py-3 bg-[#f0f9ff] border-b border-blue-100 flex items-center gap-2 sticky z-10 shadow-[0_2px_4px_rgba(0,0,0,0.02)]"
-                                            style={{ top: selectedDates.length === 1 ? '190px' : '226px' }}
-                                        >
-                                            <svg className="w-4 h-4 text-sky-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                                            </svg>
-                                            <span className="font-bold text-sky-500 text-sm leading-tight">{venue}</span>
-                                        </div>
+                                {Object.entries(scheduleDataGroupedByVenue).map(([date, venues]) => (
+                                    <div key={date}>
+                                        {selectedDates.length !== 1 && (
+                                            <div className="px-4 py-2 bg-[#ff4060] text-white text-sm font-bold sticky top-[190px] z-20 shadow-sm flex items-center gap-2 h-[36px]">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                                {formatShortDate(date)} {getWeekday(date)}
+                                            </div>
+                                        )}
 
-                                        <div className="px-4">
-                                            {movies.map((movie, index) => {
-                                                const isSelected = selectedSchedules.includes(movie._uid);
-                                                return (
-                                                    <div 
-                                                        key={index} 
-                                                        className={`flex py-4 border-b border-gray-50 last:border-none transition-colors ${isSelectMode ? 'cursor-pointer hover:bg-red-50/50' : 'hover:bg-gray-50'}`}
-                                                        onClick={() => isSelectMode && toggleScheduleSelection(movie._uid)}
-                                                    >
-                                                        {isSelectMode && (
-                                                            <div className="w-8 shrink-0 flex items-center justify-start pr-2">
-                                                                <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#ff4060] border-[#ff4060]' : 'bg-white border-gray-300'}`}>
-                                                                    {isSelected && <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+                                        {Object.entries(venues).map(([venue, movies]) => (
+                                            <div key={`${date}-${venue}`} className="bg-white mb-2 shadow-sm">
+                                                <div className="px-4 py-3 bg-[#f0f9ff] border-b border-blue-100 flex items-center gap-2 sticky z-10 shadow-[0_2px_4px_rgba(0,0,0,0.02)]" style={{ top: selectedDates.length === 1 ? '190px' : '226px' }}>
+                                                    <svg className="w-4 h-4 text-sky-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg>
+                                                    <span className="font-bold text-sky-500 text-sm leading-tight">{venue}</span>
+                                                </div>
+
+                                                <div className="px-4">
+                                                    {movies.map((movie, index) => {
+                                                        const isSelected = selectedSchedules.includes(movie._uid);
+                                                        return (
+                                                            <div key={index} className="flex py-4 border-b border-gray-50 last:border-none hover:bg-gray-50 transition-colors relative pr-16">
+                                                                <div className="w-[72px] shrink-0 flex flex-col pt-0.5">
+                                                                    <span className="text-xl font-bold leading-none mb-1.5 text-gray-900">{movie.time}</span>
+                                                                    <span className="text-[11px] text-gray-400 leading-none">{movie.endTime}散场</span>
+                                                                </div>
+                                                                <div className="flex-1 min-w-0 pr-2">
+                                                                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                                                        <h3 className="text-[18px] sm:text-[20px] font-bold leading-tight text-gray-900">{movie.name}</h3>
+                                                                        <DoubanBadge score={movie.doubanScore} link={movie.doubanLink} />
+                                                                    </div>
+                                                                    <div className="text-[12px] text-gray-500 leading-snug line-clamp-1">
+                                                                        {movie.unit} {movie.unit && " | "} {movie.year && `${movie.year}年 | `} {movie.duration}分钟
+                                                                    </div>
+                                                                </div>
+
+                                                                {movie.activity && (
+                                                                    <div className="shrink-0 flex items-start pt-0.5">
+                                                                        <span className="inline-block border border-orange-400 text-orange-500 text-[10px] px-1.5 py-0.5 rounded font-medium">{movie.activity}</span>
+                                                                    </div>
+                                                                )}
+
+                                                                {/* ✨ 快捷加入日历按钮 ✨ */}
+                                                                <div className="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col items-center">
+                                                                    <button onClick={() => toggleSchedule(movie._uid)} className={`p-2 rounded-full border transition-colors ${isSelected ? 'bg-red-50 border-red-200 text-[#ff4060]' : 'bg-white border-gray-300 text-gray-300 hover:bg-gray-50 hover:text-gray-500'}`}>
+                                                                        <svg className="w-5 h-5" fill={isSelected ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                                                                    </button>
+                                                                    <span className={`text-[10px] mt-1 font-medium ${isSelected ? 'text-[#ff4060]' : 'text-gray-400'}`}>{isSelected ? '已加入' : '加日历'}</span>
                                                                 </div>
                                                             </div>
-                                                        )}
-
-                                                        <div className="w-[72px] shrink-0 flex flex-col pt-0.5">
-                                                            <span className={`text-xl font-bold leading-none mb-1.5 ${isSelectMode && isSelected ? 'text-[#ff4060]' : 'text-gray-900'}`}>{movie.time}</span>
-                                                            <span className="text-[11px] text-gray-400 leading-none">{movie.endTime}散场</span>
-                                                        </div>
-
-                                                        <div className="flex-1 min-w-0 pr-2">
-                                                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                                                                <h3 className={`text-[18px] sm:text-[20px] font-bold leading-tight ${isSelectMode && isSelected ? 'text-[#ff4060]' : 'text-gray-900'}`}>
-                                                                    {movie.name}
-                                                                </h3>
-                                                                <DoubanBadge score={movie.doubanScore} link={movie.doubanLink} />
-                                                            </div>
-                                                            <div className="text-[12px] text-gray-500 leading-snug line-clamp-1">
-                                                                {movie.unit} {movie.unit && " | "} {movie.year && `${movie.year}年 | `} {movie.duration}分钟
-                                                            </div>
-                                                        </div>
-
-                                                        {movie.activity && (
-                                                            <div className="shrink-0 flex items-start pt-0.5">
-                                                                <span className="inline-block border border-orange-400 text-orange-500 text-[10px] px-1.5 py-0.5 rounded font-medium">
-                                                                    {movie.activity}
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 ))}
                             </div>
-                        ))}
-                    </div>
+                        </>
+                    )}
 
-                    {/* 🌟 底部固定生成日程按钮 (仅在选择模式显示) 🌟 */}
-                    {isSelectMode && (
-                        <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] p-3 z-50 animate-slide-up flex items-center justify-between">
-                            <div className="flex flex-col ml-2">
-                                <span className="text-gray-500 text-xs">已选择</span>
-                                <span className="text-[#ff4060] font-bold text-lg leading-tight">{selectedSchedules.length} 场</span>
+                    {/* ======================================================== */}
+                    {/* 我的日历视图 (按纯时间线排列，支持多选分享及冲突预警) */}
+                    {/* ======================================================== */}
+                    {activeTab === 'calendar' && (
+                        <div className="flex-1 bg-[#f5f5f5] flex flex-col animate-fade-in relative min-h-screen">
+                            {/* 日历控制栏 */}
+                            <div className="bg-white border-b border-gray-200 p-3 shadow-sm flex justify-between items-center sticky top-[60px] z-30">
+                                <div className="font-bold text-gray-800 text-sm">已锁定了 {selectedSchedules.length} 场放映</div>
+                                {selectedSchedules.length > 0 && (
+                                    !isShareMode ? (
+                                        <button 
+                                            onClick={() => { setIsShareMode(true); setShareSelection([...selectedSchedules]); }} 
+                                            className="text-xs bg-blue-50 border border-blue-200 text-blue-600 px-3 py-1.5 rounded-full font-bold shadow-sm transition-colors hover:bg-blue-100"
+                                        >
+                                            🚀 发送给朋友 / 保存长图
+                                        </button>
+                                    ) : (
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setShareSelection([...selectedSchedules])} className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 font-bold rounded-full">全选</button>
+                                            <button onClick={() => setIsShareMode(false)} className="text-xs px-3 py-1.5 bg-red-50 text-red-600 font-bold rounded-full border border-red-100">取消</button>
+                                        </div>
+                                    )
+                                )}
                             </div>
-                            <button 
-                                onClick={handleGenerateImage}
-                                className={`px-6 py-2.5 rounded-full font-bold text-white shadow-md transition-all ${selectedSchedules.length > 0 ? 'bg-[#ff4060] hover:bg-[#e63956]' : 'bg-gray-300 cursor-not-allowed'}`}
-                            >
-                                生成分享图
-                            </button>
+
+                            {selectedSchedules.length === 0 ? (
+                                <div className="text-center py-32 flex flex-col items-center px-6">
+                                    <div className="text-5xl mb-4">📝</div>
+                                    <h3 className="text-lg font-bold text-gray-700 mb-2">您的日历还是空的</h3>
+                                    <p className="text-sm text-gray-500">点击上方「全部排片」，遇到想看的电影点击右侧的爱心即可加入您的专属日历。</p>
+                                </div>
+                            ) : (
+                                <div className="pb-24">
+                                    {Object.entries(myCalendarData).map(([date, movies]) => (
+                                        <div key={date} className="mb-3">
+                                            <div className="px-4 py-2 bg-gray-800 text-white text-sm font-bold sticky z-20 shadow-sm flex justify-between items-center" style={{ top: '115px' }}>
+                                                <div className="flex items-center gap-2">
+                                                    <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                    {formatShortDate(date)} {getWeekday(date)}
+                                                </div>
+                                                <div className="text-xs text-gray-300 font-normal">当天共 {movies.length} 场</div>
+                                            </div>
+                                            
+                                            <div className="bg-white">
+                                                {movies.map((movie, index) => {
+                                                    const isSelected = shareSelection.includes(movie._uid);
+                                                    // ✨ 在日历UI中调用冲突预警检测逻辑
+                                                    const isConflict = index > 0 && checkConflict(movies[index - 1], movie);
+                                                    return (
+                                                        <div key={movie._uid} className="flex py-5 px-4 border-b border-gray-100 last:border-none relative">
+                                                            {/* 分享模式下的复选框 */}
+                                                            {isShareMode && (
+                                                                <div className="w-8 shrink-0 flex items-center" onClick={() => toggleShareSelection(movie._uid)}>
+                                                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#ff4060] border-[#ff4060]' : 'bg-white border-gray-300'}`}>
+                                                                        {isSelected && <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            <div className="w-[75px] shrink-0 pt-0.5 border-r border-gray-100 mr-3">
+                                                                <div className="text-[22px] font-bold text-gray-900 leading-none tracking-tight">{movie.time}</div>
+                                                                <div className="text-[11px] text-gray-400 mt-1.5">{movie.endTime}散场</div>
+                                                            </div>
+
+                                                            <div className="flex-1 min-w-0 pr-8">
+                                                                <div className="text-[17px] font-bold text-gray-900 leading-tight mb-1.5 break-words">{movie.name}</div>
+                                                                <div className="text-[13px] text-sky-600 font-bold mb-1 flex items-start gap-1">
+                                                                    <span className="shrink-0 mt-0.5"><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg></span>
+                                                                    <span>{movie.venue}</span>
+                                                                </div>
+                                                                <div className="text-[12px] text-gray-500 break-words">
+                                                                    {movie.unit} {movie.unit && "|"} {movie.year && `${movie.year}年 | `} {movie.duration}分钟
+                                                                </div>
+                                                                {movie.activity && (
+                                                                    <div className="mt-1.5 inline-block border border-orange-400 text-orange-500 text-[10px] px-1.5 py-0.5 rounded font-medium">{movie.activity}</div>
+                                                                )}
+                                                                
+                                                                {/* ✨ 日历界面的黄色冲突警告标签 ✨ */}
+                                                                {isConflict && (
+                                                                    <div className="mt-2 inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-600 text-[11px] px-2 py-1 rounded font-bold">
+                                                                        ⚠️ 与上一场放映时间冲突
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* 非分享模式下的移除按钮 */}
+                                                            {!isShareMode && (
+                                                                <button onClick={() => toggleSchedule(movie._uid)} className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-gray-300 hover:text-red-500 transition-colors">
+                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* 🌟 底部固定生成日程按钮 (仅在日历分享模式下显示) 🌟 */}
+                            {isShareMode && (
+                                <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] p-3 z-50 animate-slide-up flex items-center justify-between">
+                                    <div className="flex flex-col ml-2">
+                                        <span className="text-gray-500 text-xs">勾选了</span>
+                                        <span className="text-[#ff4060] font-bold text-lg leading-tight">{shareSelection.length} 场</span>
+                                    </div>
+                                    <button 
+                                        onClick={handleGenerateImage}
+                                        className={`px-6 py-2.5 rounded-full font-bold text-white shadow-md transition-all ${shareSelection.length > 0 ? 'bg-[#ff4060] hover:bg-[#e63956]' : 'bg-gray-300 cursor-not-allowed'}`}
+                                    >
+                                        生成分享图片与链接
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
 
-                    {/* 🌟 高颜值且全兼容的羽化回到顶部按钮 🌟 */}
+                    {/* 🌟 高颜值全兼容回到顶部按钮 🌟 */}
                     {showTopBtn && (
                         <button
                             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                            className={`fixed left-1/2 -translate-x-1/2 z-[99999] flex items-center justify-center text-gray-600 hover:text-[#ff4060] transition-all duration-300 drop-shadow-md touch-manipulation animate-fade-in ${isSelectMode ? 'bottom-20' : 'bottom-10'}`}
-                            style={{
-                                width: '64px',
-                                height: '64px',
-                                background: 'radial-gradient(circle, rgba(255,255,255,0.95) 20%, rgba(255,255,255,0) 70%)',
-                            }}
-                            title="回到顶部"
+                            className={`fixed left-1/2 -translate-x-1/2 z-[99999] flex items-center justify-center text-gray-600 hover:text-[#ff4060] transition-all duration-300 drop-shadow-md touch-manipulation animate-fade-in ${isShareMode ? 'bottom-24' : 'bottom-10'}`}
+                            style={{ width: '64px', height: '64px', background: 'radial-gradient(circle, rgba(255,255,255,0.95) 20%, rgba(255,255,255,0) 70%)' }}
                         >
                             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
