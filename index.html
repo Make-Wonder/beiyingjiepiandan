@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>北影节排片日历 - 完整列表版</title>
+    <title>北影节排片日历</title>
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React and ReactDOM -->
@@ -934,7 +934,6 @@ Please follow our official platforms for latest information on screenings and ev
             return `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
         };
 
-        // ✨ 核心预警：计算两部电影之间是否发生时间冲突 ✨
         const checkConflict = (prevMovie, currentMovie) => {
             if (!prevMovie || !currentMovie) return false;
             const [prevH, prevM] = prevMovie.time.split(':').map(Number);
@@ -944,10 +943,7 @@ Please follow our official platforms for latest information on screenings and ev
             const prevEndMins = prevStartMins + parseInt(prevMovie.duration);
             
             let currStartMins = currH * 60 + currM;
-            // 跨越零点的场次时间处理
             if (currStartMins < prevStartMins) currStartMins += 24 * 60; 
-
-            // 如果当前影片的开始时间早于上一部影片的结束时间，则判定冲突
             return currStartMins < prevEndMins;
         };
 
@@ -966,7 +962,7 @@ Please follow our official platforms for latest information on screenings and ev
         const DoubanBadge = ({ score, link }) => {
             if (!score && !link) return null;
             const content = (
-                <div className="flex items-center gap-1 bg-[#e8f5e9] text-[#007722] px-1.5 py-0.5 rounded text-xs font-bold shrink-0">
+                <div className="flex items-center gap-1 bg-[#e8f5e9] text-[#007722] px-1.5 py-0.5 rounded text-xs font-bold shrink-0 mt-0.5">
                     <svg viewBox="0 0 24 24" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
                         <rect width="24" height="24" rx="4" fill="#007722"/>
                         <text x="12" y="17" fill="white" fontSize="13" fontFamily="sans-serif" textAnchor="middle" fontWeight="bold">豆</text>
@@ -980,7 +976,7 @@ Please follow our official platforms for latest information on screenings and ev
             return content;
         };
 
-        const FilterDropdown = ({ label, icon, options, selectedValues, onChange, formatLabel = x => x }) => {
+        const FilterDropdown = ({ label, icon, options, selectedValues, onChange, align = "left", formatLabel = x => x }) => {
             const [isOpen, setIsOpen] = useState(false);
             const [isMulti, setIsMulti] = useState(false);
             const dropdownRef = useRef(null);
@@ -1031,17 +1027,18 @@ Please follow our official platforms for latest information on screenings and ev
                                 `已选 ${selectedValues.length} 项`;
 
             return (
-                <div className="relative w-full text-xs sm:text-sm" ref={dropdownRef}>
-                    <div 
-                        className="w-full border border-gray-300 rounded px-2 py-1.5 bg-gray-50 flex items-center justify-between cursor-pointer hover:border-[#ff4060] transition-colors"
+                <div className="relative w-full text-xs sm:text-sm min-w-0" ref={dropdownRef}>
+                    <button 
+                        type="button"
+                        className="w-full border border-gray-300 rounded px-2 py-1.5 bg-gray-50 flex items-center justify-between cursor-pointer hover:border-[#ff4060] transition-colors text-left touch-manipulation"
                         onClick={() => setIsOpen(!isOpen)}
                     >
-                        <span className="truncate text-gray-700">{icon} {label}: {displayText}</span>
-                        <svg className={`w-3.5 h-3.5 text-gray-400 shrink-0 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                    </div>
+                        <span className="truncate text-gray-700 block min-w-0 flex-1 pr-1">{icon} {label}: {displayText}</span>
+                        <svg className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
 
                     {isOpen && (
-                        <div className="absolute top-[calc(100%+6px)] left-0 min-w-full w-[220px] bg-white border border-gray-200 rounded-lg shadow-xl z-[100] max-h-[300px] flex flex-col overflow-hidden animate-fade-in">
+                        <div className={`absolute top-[calc(100%+6px)] ${align === 'right' ? 'right-0' : 'left-0'} min-w-full w-[220px] max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-lg shadow-xl z-[100] max-h-[300px] flex flex-col overflow-hidden animate-fade-in`}>
                             <div className="bg-gray-50 border-b border-gray-200 p-2.5 flex justify-between items-center shrink-0">
                                 <label className="flex items-center gap-1.5 cursor-pointer text-gray-800 font-medium text-xs sm:text-sm">
                                     <input type="checkbox" checked={isMulti} onChange={(e) => setIsMulti(e.target.checked)} className="w-3.5 h-3.5 accent-[#ff4060]" />
@@ -1049,9 +1046,9 @@ Please follow our official platforms for latest information on screenings and ev
                                 </label>
                                 <button onClick={handleClear} className="text-[#ff4060] hover:text-red-700 font-bold text-[11px] sm:text-xs bg-red-50 border border-red-100 px-2 py-1 rounded">一键清空</button>
                             </div>
-                            <div className="flex-1 overflow-y-auto no-scrollbar">
+                            <div className="flex-1 overflow-y-auto no-scrollbar relative">
                                 <div 
-                                    className={`px-3 py-3 cursor-pointer border-b border-gray-50 hover:bg-gray-50 text-xs sm:text-sm flex justify-between items-center transition-colors ${selectedValues.length === 0 ? 'text-[#ff4060] font-bold bg-red-50/20' : 'text-gray-700'}`}
+                                    className={`sticky top-0 z-10 px-3 py-3 cursor-pointer border-b border-gray-100 hover:bg-gray-50 text-xs sm:text-sm flex justify-between items-center transition-colors shadow-[0_2px_4px_rgba(0,0,0,0.02)] ${selectedValues.length === 0 ? 'text-[#ff4060] font-bold bg-red-50/90 backdrop-blur' : 'text-gray-700 bg-white/95 backdrop-blur'}`}
                                     onClick={handleClear}
                                 >
                                     <span>显示全部</span>
@@ -1077,24 +1074,53 @@ Please follow our official platforms for latest information on screenings and ev
             );
         };
 
-        const MovieSelectorModal = ({ availableMovies, selectedMovies, onClose, onSelect }) => {
+        const MovieFilterDropdown = ({ label, icon, options, selectedValues, onChange, align = "right" }) => {
+            const [isOpen, setIsOpen] = useState(false);
             const [isMulti, setIsMulti] = useState(false);
             const [searchTerm, setSearchTerm] = useState("");
+            const dropdownRef = useRef(null);
+
+            useEffect(() => {
+                const handleClickOutside = (e) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                        setIsOpen(false);
+                    }
+                };
+                if (isOpen) {
+                    document.addEventListener('mousedown', handleClickOutside);
+                    document.addEventListener('touchstart', handleClickOutside);
+                }
+                return () => {
+                    document.removeEventListener('mousedown', handleClickOutside);
+                    document.removeEventListener('touchstart', handleClickOutside);
+                };
+            }, [isOpen]);
+
+            useEffect(() => {
+                if (!isMulti && selectedValues.length > 1) {
+                    onChange([]);
+                }
+            }, [isMulti]);
 
             const filteredMovies = useMemo(() => {
-                if (!searchTerm.trim()) return availableMovies;
+                if (!searchTerm.trim()) return options;
                 const keyword = searchTerm.trim().toLowerCase();
-                return availableMovies.filter(m => m.toLowerCase().includes(keyword));
-            }, [availableMovies, searchTerm]);
+                return options.filter(m => m.toLowerCase().includes(keyword));
+            }, [options, searchTerm]);
 
             const grouped = useMemo(() => {
                 const groups = {};
                 const { pinyin } = window.pinyinPro;
                 
-                filteredMovies.forEach(m => {
+                const sortedMovies = [...filteredMovies].sort((a, b) => {
+                    const pyA = pinyin(a, { toneType: 'none', type: 'array' }).join('');
+                    const pyB = pinyin(b, { toneType: 'none', type: 'array' }).join('');
+                    return pyA.localeCompare(pyB);
+                });
+
+                sortedMovies.forEach(m => {
                     let letter = pinyin(m[0], { pattern: 'first', toneType: 'none' })[0].toUpperCase();
                     if (!/^[A-Z]$/.test(letter)) letter = '#';
-                    
                     if (!groups[letter]) groups[letter] = [];
                     groups[letter].push(m);
                 });
@@ -1107,15 +1133,34 @@ Please follow our official platforms for latest information on screenings and ev
                 return { groups, keys };
             }, [filteredMovies]);
 
-            useEffect(() => {
-                if (!isMulti && selectedMovies.length > 1) {
-                    onSelect([]);
+            const handleSelect = (val) => {
+                if (isMulti) {
+                    if (selectedValues.includes(val)) {
+                        onChange(selectedValues.filter(x => x !== val));
+                    } else {
+                        onChange([...selectedValues, val]);
+                    }
+                } else {
+                    onChange([val]);
+                    setIsOpen(false); 
                 }
-            }, [isMulti]);
+            };
 
-            const scrollToLetter = (letter) => {
-                const el = document.getElementById(`letter-${letter}`);
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
+            const handleClear = (e) => {
+                e.stopPropagation();
+                onChange([]);
+                if (!isMulti) setIsOpen(false);
+            };
+
+            const scrollToLetter = (e, letter) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if(!dropdownRef.current) return;
+                const container = dropdownRef.current.querySelector('.movie-scroll-container');
+                const target = dropdownRef.current.querySelector(`#dropdown-letter-${letter}`);
+                if (container && target) {
+                    container.scrollTo({ top: target.offsetTop - container.offsetTop, behavior: 'smooth' });
+                }
             };
 
             const handleTouchMove = (e) => {
@@ -1123,118 +1168,112 @@ Please follow our official platforms for latest information on screenings and ev
                 const touch = e.touches[0];
                 const el = document.elementFromPoint(touch.clientX, touch.clientY);
                 if (el && el.dataset.letter) {
-                    const l = el.dataset.letter;
-                    const target = document.getElementById(`letter-${l}`);
-                    if (target) {
-                        target.scrollIntoView();
+                    const letter = el.dataset.letter;
+                    const container = dropdownRef.current.querySelector('.movie-scroll-container');
+                    const target = dropdownRef.current.querySelector(`#dropdown-letter-${letter}`);
+                    if (container && target) {
+                        container.scrollTop = target.offsetTop - container.offsetTop;
                     }
                 }
             };
 
-            const handleSelectMovie = (m) => {
-                if (isMulti) {
-                    if (selectedMovies.includes(m)) {
-                        onSelect(selectedMovies.filter(x => x !== m));
-                    } else {
-                        onSelect([...selectedMovies, m]);
-                    }
-                } else {
-                    onSelect([m]);
-                    onClose(); 
-                }
-            };
-
-            const handleClear = () => {
-                onSelect([]);
-                if (!isMulti) onClose();
-            };
+            const displayText = selectedValues.length === 0 ? "全部" :
+                                selectedValues.length === 1 ? selectedValues[0] :
+                                `已选 ${selectedValues.length} 部`;
 
             return (
-                <div className="fixed inset-0 z-[120] bg-white flex flex-col animate-fade-in">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 bg-white shadow-sm shrink-0 z-20 relative">
-                        <h2 className="text-lg font-bold text-gray-800">影片筛选</h2>
-                        <div className="flex items-center gap-3">
-                            <label className="flex items-center gap-1 text-sm font-medium text-gray-600 cursor-pointer bg-gray-50 px-2 py-1 rounded border border-gray-200">
-                                <input type="checkbox" checked={isMulti} onChange={e => setIsMulti(e.target.checked)} className="w-3.5 h-3.5 accent-[#ff4060]"/>
-                                ☑️ 多选
-                            </label>
-                            <button onClick={onClose} className="text-[#ff4060] font-bold py-1">完成</button>
-                        </div>
-                    </div>
-                    
-                    <div className="bg-gray-50 p-3 border-b border-gray-200 sticky top-0 z-10 shrink-0">
-                        <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                            </span>
-                            <input 
-                                type="text" 
-                                placeholder="输入影片拼音或汉字检索..." 
-                                className="w-full bg-white border border-gray-300 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-[#ff4060] focus:ring-1 focus:ring-[#ff4060]"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                            {searchTerm && (
-                                <button onClick={() => setSearchTerm("")} className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                </button>
-                            )}
-                        </div>
-                    </div>
+                <div className="relative w-full text-xs sm:text-sm min-w-0" ref={dropdownRef}>
+                    <button 
+                        type="button"
+                        className="w-full border border-gray-300 rounded px-2 py-1.5 bg-gray-50 flex items-center justify-between cursor-pointer hover:border-[#ff4060] transition-colors text-left touch-manipulation"
+                        onClick={() => setIsOpen(!isOpen)}
+                    >
+                        <span className="truncate text-gray-700 block min-w-0 flex-1 pr-1">{icon} {label}: {displayText}</span>
+                        <svg className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
 
-                    <div className="flex-1 overflow-y-auto relative pb-10 bg-gray-50 no-scrollbar">
-                        <div 
-                            className="sticky top-0 z-10 px-4 py-3 bg-white border-b border-gray-200 shadow-[0_2px_4px_rgba(0,0,0,0.02)] font-bold text-[#ff4060] active:bg-gray-100 flex items-center justify-between cursor-pointer"
-                            onClick={handleClear}
-                        >
-                            <div className="flex items-center"><span className="mr-2">🎬</span>清除所有选择 (显示全部)</div>
-                            <button className="text-[11px] bg-red-50 border border-red-100 px-2 py-1 rounded text-[#ff4060]">一键清空</button>
-                        </div>
+                    {isOpen && (
+                        <div className={`absolute top-[calc(100%+6px)] ${align === 'right' ? 'right-0' : 'left-0'} min-w-[280px] sm:min-w-[320px] max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-lg shadow-xl z-[100] max-h-[60vh] flex flex-col overflow-hidden animate-fade-in`}>
+                            
+                            <div className="bg-gray-50 border-b border-gray-200 p-2.5 flex justify-between items-center shrink-0">
+                                <label className="flex items-center gap-1.5 cursor-pointer text-gray-800 font-medium text-xs sm:text-sm">
+                                    <input type="checkbox" checked={isMulti} onChange={(e) => setIsMulti(e.target.checked)} className="w-3.5 h-3.5 accent-[#ff4060]" />
+                                    ☑️ 多选
+                                </label>
+                                <button onClick={handleClear} className="text-[#ff4060] hover:text-red-700 font-bold text-[11px] sm:text-xs bg-red-50 border border-red-100 px-2 py-1 rounded">一键清空</button>
+                            </div>
 
-                        {grouped.keys.length === 0 ? (
-                            <div className="py-10 text-center text-gray-400 text-sm">没有找到相关影片</div>
-                        ) : (
-                            grouped.keys.map(letter => (
-                                <div key={letter} id={`letter-${letter}`}>
-                                    <div className="bg-gray-100/90 backdrop-blur px-4 py-1 text-xs font-bold text-gray-500 border-y border-gray-200">
-                                        {letter}
-                                    </div>
-                                    {grouped.groups[letter].map(m => {
-                                        const isSelected = selectedMovies.includes(m);
-                                        return (
-                                            <div 
-                                                key={m}
-                                                className={`px-4 py-3.5 bg-white border-b border-gray-50 active:bg-gray-50 transition-colors flex justify-between items-center cursor-pointer ${isSelected ? 'text-[#ff4060] font-bold bg-red-50/30' : 'text-gray-800 font-medium'}`}
-                                                onClick={() => handleSelectMovie(m)}
-                                            >
-                                                <span className="pr-4">{m}</span>
-                                                {isSelected && (
-                                                    <svg className="w-5 h-5 text-[#ff4060] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ))
-                        )}
-                    </div>
+                            <div className="bg-white p-2 border-b border-gray-200 shrink-0 relative">
+                                <span className="absolute inset-y-0 left-2 pl-2 flex items-center text-gray-400">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                </span>
+                                <input 
+                                    type="text" 
+                                    placeholder="输入拼音或汉字搜索影片..." 
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-full py-1.5 pl-8 pr-6 text-xs focus:outline-none focus:border-[#ff4060] focus:bg-white"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                                {searchTerm && (
+                                    <button onClick={() => setSearchTerm("")} className="absolute inset-y-0 right-2 pr-2 flex items-center text-gray-400 hover:text-[#ff4060]">
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>
+                                )}
+                            </div>
 
-                    {!searchTerm && (
-                        <div 
-                            className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col w-6 items-center text-[10px] sm:text-[11px] text-[#ff4060] font-bold bg-white/60 backdrop-blur-sm rounded-full py-2 shadow-sm touch-none z-20"
-                            onTouchMove={handleTouchMove}
-                            onTouchStart={handleTouchMove}
-                        >
-                            {grouped.keys.map(letter => (
+                            <div className="movie-scroll-container flex-1 overflow-y-auto no-scrollbar relative pr-6">
                                 <div 
-                                    key={letter} 
-                                    data-letter={letter}
-                                    className="w-full text-center py-[3px] cursor-pointer"
-                                    onClick={() => scrollToLetter(letter)}
+                                    className={`sticky top-0 z-10 px-3 py-2.5 cursor-pointer border-b border-gray-100 hover:bg-gray-50 text-xs sm:text-sm flex justify-between items-center transition-colors shadow-[0_2px_4px_rgba(0,0,0,0.02)] ${selectedValues.length === 0 ? 'text-[#ff4060] font-bold bg-red-50/95 backdrop-blur' : 'text-gray-700 bg-white/95 backdrop-blur'}`}
+                                    onClick={handleClear}
                                 >
-                                    {letter}
+                                    <span>显示全部</span>
+                                    {selectedValues.length === 0 && <svg className="w-4 h-4 text-[#ff4060]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>}
                                 </div>
-                            ))}
+
+                                {grouped.keys.length === 0 ? (
+                                    <div className="py-6 text-center text-gray-400 text-xs">未找到匹配影片</div>
+                                ) : (
+                                    grouped.keys.map(letter => (
+                                        <div key={letter} id={`dropdown-letter-${letter}`}>
+                                            <div className="bg-gray-100/80 px-3 py-1 text-[10px] font-bold text-gray-500 border-y border-gray-200">
+                                                {letter}
+                                            </div>
+                                            {grouped.groups[letter].map(m => {
+                                                const isSelected = selectedValues.includes(m);
+                                                return (
+                                                    <div 
+                                                        key={m}
+                                                        className={`px-3 py-2.5 cursor-pointer border-b border-gray-50 hover:bg-gray-50 flex justify-between items-center text-xs sm:text-sm transition-colors ${isSelected ? 'text-[#ff4060] font-bold bg-red-50/20' : 'text-gray-800 font-medium'}`}
+                                                        onClick={() => handleSelect(m)}
+                                                    >
+                                                        <span className="truncate pr-2">{m}</span>
+                                                        {isSelected && <svg className="w-4 h-4 text-[#ff4060] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            {!searchTerm && grouped.keys.length > 0 && (
+                                <div 
+                                    className="absolute right-0 top-[110px] bottom-2 flex flex-col w-6 items-center text-[9px] sm:text-[10px] text-[#ff4060] font-bold bg-white/80 backdrop-blur-sm rounded-l-md py-1 shadow-sm touch-none z-20 overflow-hidden"
+                                    onTouchMove={handleTouchMove}
+                                    onTouchStart={handleTouchMove}
+                                >
+                                    {grouped.keys.map(letter => (
+                                        <div 
+                                            key={letter} 
+                                            data-letter={letter}
+                                            className="w-full flex-1 flex items-center justify-center cursor-pointer hover:bg-red-50 transition-colors"
+                                            onClick={(e) => scrollToLetter(e, letter)}
+                                        >
+                                            {letter}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -1250,7 +1289,6 @@ Please follow our official platforms for latest information on screenings and ev
             const [selectedMovies, setSelectedMovies] = useState([]);
             const [hasActivity, setHasActivity] = useState(false);
             
-            const [showMovieSelector, setShowMovieSelector] = useState(false);
             const [isGalleryOpen, setIsGalleryOpen] = useState(false); 
             const [lightboxIndex, setLightboxIndex] = useState(null); 
             const [showContactModal, setShowContactModal] = useState(false); 
@@ -1394,6 +1432,7 @@ Please follow our official platforms for latest information on screenings and ev
                 }
             }, [selectedUnits, availableMovies, selectedMovies]);
 
+            // 🌟 强力兼容监听滚动显示回到顶部按钮 🌟
             useEffect(() => {
                 const handleScroll = () => {
                     const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
@@ -1480,6 +1519,7 @@ Please follow our official platforms for latest information on screenings and ev
                 return grouped;
             }, [shareSelection, movieData]);
 
+            // 🌟 更稳定的导出长图逻辑 🌟
             const handleGenerateImage = () => {
                 if(shareSelection.length === 0) {
                     alert("您还未选择要分享的影片！");
@@ -1489,10 +1529,12 @@ Please follow our official platforms for latest information on screenings and ev
                 setTimeout(() => {
                     if (exportRef.current) {
                         html2canvas(exportRef.current, { 
-                            scale: 2, 
+                            scale: 3, // 提升渲染比例到超清
                             useCORS: true, 
                             backgroundColor: '#f5f5f5',
-                            logging: false
+                            logging: false,
+                            windowWidth: 600, // 强制约束视口，防止计算崩塌
+                            windowHeight: exportRef.current.scrollHeight
                         }).then(canvas => {
                             setGeneratedImage(canvas.toDataURL('image/png'));
                             setIsGenerating(false);
@@ -1547,13 +1589,13 @@ Please follow our official platforms for latest information on screenings and ev
                         </div>
                     )}
 
-                    {/* 🌟 极致排版的离屏渲染区 (专门用于 html2canvas 导出图片) 🌟 */}
-                    <div style={{ position: 'fixed', left: '-9999px', top: 0, width: '600px', zIndex: -9999 }}>
+                    {/* 🌟 极致排版的离屏渲染区 (将 position 改为 absolute 解决 html2canvas 截断 Bug) 🌟 */}
+                    <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '600px', zIndex: -9999 }}>
                         <div ref={exportRef} className="bg-[#f5f5f5] p-6 font-sans text-gray-800" style={{ width: '600px' }}>
                             <div className="bg-white rounded-2xl p-6 shadow-sm mb-5 border border-gray-100 text-center relative overflow-hidden">
                                 <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-400 to-[#ff4060]"></div>
-                                <h1 className="text-3xl font-bold tracking-tight mb-3 mt-2 text-gray-900">我的北影节日程</h1>
-                                <p className="text-gray-500 text-base">我添加了 {shareSelection.length} 场精彩放映</p>
+                                <h1 className="text-3xl font-bold tracking-tight mb-3 mt-2 text-gray-900">我的北影节专属日程</h1>
+                                <p className="text-gray-500 text-base">为好友精心挑选了 {shareSelection.length} 场精彩放映</p>
                             </div>
                             
                             {Object.entries(exportShareData).map(([date, movies]) => (
@@ -1561,27 +1603,28 @@ Please follow our official platforms for latest information on screenings and ev
                                     <div className="px-5 py-2.5 bg-[#ff4060] inline-block text-white text-[17px] font-bold rounded-t-xl shadow-sm">
                                         {formatShortDate(date)} {getWeekday(date)}
                                     </div>
-                                    <div className="bg-white rounded-b-2xl rounded-tr-2xl shadow-sm overflow-hidden border border-gray-100">
+                                    <div className="bg-white rounded-b-2xl rounded-tr-2xl shadow-sm border border-gray-100">
                                         {movies.map((movie, index) => {
                                             const isConflict = index > 0 && checkConflict(movies[index - 1], movie);
                                             return (
                                                 <div key={index} className="py-5 px-5 border-b border-gray-100 last:border-none flex items-start">
-                                                    <div className="w-[85px] shrink-0 pt-1 text-center pr-3">
-                                                        <div className="text-[24px] font-bold text-gray-900 mb-1">{movie.time}</div>
-                                                        <div className="text-[12px] text-gray-400">{movie.endTime}散场</div>
+                                                    <div className="w-[90px] shrink-0 pt-1 text-center pr-3">
+                                                        <div className="text-[24px] font-bold text-gray-900 mb-1 leading-none">{movie.time}</div>
+                                                        <div className="text-[13px] text-gray-400 leading-none">{movie.endTime}散场</div>
                                                     </div>
-                                                    <div className="flex-1 pl-2 border-l-2 border-gray-100 break-words">
-                                                        <div className="text-[22px] font-bold text-gray-900 mb-2 whitespace-normal" style={{ lineHeight: '1.4' }}>
+                                                    <div className="flex-1 pl-3 border-l-2 border-gray-100 break-words min-w-0">
+                                                        <div className="text-[22px] font-bold text-gray-900 mb-2 whitespace-normal break-words" style={{ lineHeight: '1.4' }}>
                                                             {movie.name}
                                                         </div>
-                                                        <div className="text-[15px] font-bold text-sky-600 mb-1.5 flex items-start gap-1">
-                                                            📍 {movie.venue}
+                                                        <div className="text-[16px] font-bold text-sky-600 mb-2 flex items-start gap-1 leading-snug">
+                                                            <span className="shrink-0 mt-0.5">📍</span>
+                                                            <span>{movie.venue}</span>
                                                         </div>
-                                                        <div className="text-[14px] text-gray-500 whitespace-normal" style={{ lineHeight: '1.6' }}>
+                                                        <div className="text-[14px] text-gray-500 whitespace-normal leading-normal">
                                                             {movie.unit} {movie.unit && " | "} {movie.year && `${movie.year}年 | `} {movie.duration}分钟
                                                         </div>
                                                         {movie.activity && (
-                                                            <div className="mt-1.5 inline-block border border-orange-400 text-orange-500 text-[12px] px-2 py-1 rounded font-medium whitespace-nowrap">
+                                                            <div className="mt-2 inline-block border border-orange-400 text-orange-500 text-[13px] px-2 py-1 rounded font-medium whitespace-nowrap">
                                                                 {movie.activity}
                                                             </div>
                                                         )}
@@ -1698,7 +1741,7 @@ Please follow our official platforms for latest information on screenings and ev
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                                         </button>
                                     </div>
-                                    <p className="text-sm text-gray-600 mb-5 leading-relaxed">如果有任何建议和疑问欢迎联系我<p></p>春招求offer中，求捞…</p>
+                                    <p className="text-sm text-gray-600 mb-5 leading-relaxed">如果有任何建议和疑问欢迎联系我</p>
                                     <div className="space-y-3">
                                         <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100">
                                             <div className="flex items-center gap-2 text-sm text-gray-800">
@@ -1769,13 +1812,10 @@ Please follow our official platforms for latest information on screenings and ev
                                 ) : (
                                     <>
                                         <div className="grid grid-cols-2 gap-2">
-                                            <FilterDropdown label="日期" icon="📆" options={dates} selectedValues={selectedDates} onChange={setSelectedDates} formatLabel={d => formatShortDate(d) + " " + getWeekday(d)} />
-                                            <FilterDropdown label="影院" icon="📽️" options={venues} selectedValues={selectedVenues} onChange={setSelectedVenues} />
-                                            <FilterDropdown label="单元" icon="🏷️" options={units} selectedValues={selectedUnits} onChange={setSelectedUnits} />
-                                            <div className="w-full text-xs sm:text-sm border border-gray-300 rounded px-2 py-1.5 bg-gray-50 flex items-center justify-between cursor-pointer hover:border-[#ff4060]" onClick={() => setShowMovieSelector(true)}>
-                                                <span className="truncate text-gray-700">🎞️ 影片: {selectedMovies.length > 0 ? (selectedMovies.length === 1 ? selectedMovies[0] : `已选 ${selectedMovies.length} 部`) : (selectedUnits.length > 0 ? "该单元下全部" : "全部")}</span>
-                                                <svg className="w-3.5 h-3.5 text-gray-400 shrink-0 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                            </div>
+                                            <FilterDropdown label="日期" icon="📆" options={dates} selectedValues={selectedDates} onChange={setSelectedDates} formatLabel={d => formatShortDate(d) + " " + getWeekday(d)} align="left" />
+                                            <FilterDropdown label="影院" icon="📽️" options={venues} selectedValues={selectedVenues} onChange={setSelectedVenues} align="right" />
+                                            <FilterDropdown label="单元" icon="🏷️" options={units} selectedValues={selectedUnits} onChange={setSelectedUnits} align="left" />
+                                            <MovieFilterDropdown label="影片" icon="🎞️" options={availableMovies} selectedValues={selectedMovies} onChange={setSelectedMovies} align="right" />
                                         </div>
                                         <label className="flex items-center justify-between text-sm bg-gray-50 border border-gray-200 rounded px-3 py-1.5 cursor-pointer hover:bg-gray-100 transition-colors">
                                             <span className="text-gray-700 font-medium text-xs sm:text-sm">仅显示带有特殊活动场次</span>
@@ -1841,7 +1881,7 @@ Please follow our official platforms for latest information on screenings and ev
 
                                                                 {/* ✨ 快捷加入日历按钮 ✨ */}
                                                                 <div className="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col items-center">
-                                                                    <button onClick={() => toggleSchedule(movie._uid)} className={`p-2 rounded-full border transition-colors ${isSelected ? 'bg-red-50 border-red-200 text-[#ff4060]' : 'bg-white border-gray-300 text-gray-300 hover:bg-gray-50 hover:text-gray-500'}`}>
+                                                                    <button onClick={() => toggleSchedule(movie._uid)} className={`p-2 rounded-full border transition-colors touch-manipulation ${isSelected ? 'bg-red-50 border-red-200 text-[#ff4060]' : 'bg-white border-gray-300 text-gray-300 hover:bg-gray-50 hover:text-gray-500'}`}>
                                                                         <svg className="w-5 h-5" fill={isSelected ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
                                                                     </button>
                                                                     <span className={`text-[10px] mt-1 font-medium ${isSelected ? 'text-[#ff4060]' : 'text-gray-400'}`}>{isSelected ? '已加入' : '加日历'}</span>
@@ -1870,14 +1910,14 @@ Please follow our official platforms for latest information on screenings and ev
                                     !isShareMode ? (
                                         <button 
                                             onClick={() => { setIsShareMode(true); setShareSelection([...selectedSchedules]); }} 
-                                            className="text-xs bg-blue-50 border border-blue-200 text-blue-600 px-3 py-1.5 rounded-full font-bold shadow-sm transition-colors hover:bg-blue-100"
+                                            className="text-xs bg-blue-50 border border-blue-200 text-blue-600 px-3 py-1.5 rounded-full font-bold shadow-sm transition-colors hover:bg-blue-100 touch-manipulation"
                                         >
                                             🚀 发送给朋友 / 保存长图
                                         </button>
                                     ) : (
                                         <div className="flex gap-2">
-                                            <button onClick={() => setShareSelection([...selectedSchedules])} className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 font-bold rounded-full">全选</button>
-                                            <button onClick={() => setIsShareMode(false)} className="text-xs px-3 py-1.5 bg-red-50 text-red-600 font-bold rounded-full border border-red-100">取消</button>
+                                            <button onClick={() => setShareSelection([...selectedSchedules])} className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 font-bold rounded-full touch-manipulation">全选</button>
+                                            <button onClick={() => setIsShareMode(false)} className="text-xs px-3 py-1.5 bg-red-50 text-red-600 font-bold rounded-full border border-red-100 touch-manipulation">取消</button>
                                         </div>
                                     )
                                 )}
@@ -1910,7 +1950,7 @@ Please follow our official platforms for latest information on screenings and ev
                                                         <div key={movie._uid} className="flex py-5 px-4 border-b border-gray-100 last:border-none relative">
                                                             {/* 分享模式下的复选框 */}
                                                             {isShareMode && (
-                                                                <div className="w-8 shrink-0 flex items-center" onClick={() => toggleShareSelection(movie._uid)}>
+                                                                <div className="w-8 shrink-0 flex items-center touch-manipulation cursor-pointer" onClick={() => toggleShareSelection(movie._uid)}>
                                                                     <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#ff4060] border-[#ff4060]' : 'bg-white border-gray-300'}`}>
                                                                         {isSelected && <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
                                                                     </div>
@@ -1945,7 +1985,7 @@ Please follow our official platforms for latest information on screenings and ev
 
                                                             {/* 非分享模式下的移除按钮 */}
                                                             {!isShareMode && (
-                                                                <button onClick={() => toggleSchedule(movie._uid)} className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-gray-300 hover:text-red-500 transition-colors">
+                                                                <button onClick={() => toggleSchedule(movie._uid)} className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-gray-300 hover:text-red-500 transition-colors touch-manipulation">
                                                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                                                 </button>
                                                             )}
@@ -1967,7 +2007,7 @@ Please follow our official platforms for latest information on screenings and ev
                                     </div>
                                     <button 
                                         onClick={handleGenerateImage}
-                                        className={`px-6 py-2.5 rounded-full font-bold text-white shadow-md transition-all ${shareSelection.length > 0 ? 'bg-[#ff4060] hover:bg-[#e63956]' : 'bg-gray-300 cursor-not-allowed'}`}
+                                        className={`px-6 py-2.5 rounded-full font-bold text-white shadow-md transition-all touch-manipulation ${shareSelection.length > 0 ? 'bg-[#ff4060] hover:bg-[#e63956]' : 'bg-gray-300 cursor-not-allowed'}`}
                                     >
                                         生成分享图片与链接
                                     </button>
@@ -1976,14 +2016,14 @@ Please follow our official platforms for latest information on screenings and ev
                         </div>
                     )}
 
-                    {/* 🌟 高颜值全兼容回到顶部按钮 🌟 */}
+                    {/* 🌟 极高层级、全端兼容的回到顶部按钮 🌟 */}
                     {showTopBtn && (
                         <button
                             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                            className={`fixed left-1/2 -translate-x-1/2 z-[99999] flex items-center justify-center text-gray-600 hover:text-[#ff4060] transition-all duration-300 drop-shadow-md touch-manipulation animate-fade-in ${isShareMode ? 'bottom-24' : 'bottom-10'}`}
+                            className={`fixed left-1/2 -translate-x-1/2 z-[99999] flex items-center justify-center text-gray-500 hover:text-[#ff4060] transition-all duration-300 touch-manipulation animate-fade-in ${isShareMode ? 'bottom-24' : 'bottom-10'}`}
                             style={{ width: '64px', height: '64px', background: 'radial-gradient(circle, rgba(255,255,255,0.95) 20%, rgba(255,255,255,0) 70%)' }}
                         >
-                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-8 h-8 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
                             </svg>
                         </button>
